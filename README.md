@@ -27,6 +27,8 @@ O principal objetivo deste projeto é:
 # 🏗️ Arquitetura
 
 O projeto foi estruturado em camadas:
+
+```
 app/
 │
 ├── api/
@@ -44,6 +46,7 @@ app/
 ├── schemas.py # Schemas Pydantic
 ├── db.py # Configuração do banco
 ├── config.py # Variáveis de ambiente
+```
 
 ### 🔄 Fluxo de execução
 
