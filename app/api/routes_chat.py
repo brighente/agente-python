@@ -116,17 +116,37 @@ def send(payload: SendMessageIn, db: Session = Depends(get_db)):
 
     # 3- Buscar historico de conversa
     historico = (
-        db.query(Message).filter(Message.session_id == payload.session_id).order_by(Message.created_at.asc()).limit(20).all()
+        db.query(Message).filter(Message.session_id == payload.session_id).order_by(Message.created_at.desc()).limit(20).all()
     )
 
+    historico.reverse() # volta a ordem
+
     # 4- Monta o contexto
-    content_text = ""
+    system_msg=(
+        "Você está conversando em um chat."
+        "Use o histórico apenas como contexto para conversa."
+        "Responda sempre em português."
+    )
+
+    historico_formatado = []
     for m in historico:
-        content_text+=f"{m.role.upper()}: {m.content}\n"
+        role = m.role.lower().strip()
+        if role not in ("user", "assistant", "system"):
+            role = "user"
+
+        historico_formatado.append(f"{role}: {m.content}")
+
+    historico_formatado = "\n".join(historico_formatado)
+
+    prompt = (
+        f"SYSTEM: {system_msg}\n\n"
+        f"HISTÓRICO: (role: conteúdo):\n{historico_formatado}\n\n"
+        f"Agora responda a última mensagem do usuário de forma útil e objetiva."
+    )
 
     # 5- Inicia o agente
     run = agent.run(
-        input=f"Histórico:\n{content_text}\n\nAgora responda a última mensagem do usuário de forma útil.",
+        input=prompt,
         user_id=str(payload.user_id),
         session_id=str(payload.session_id),
     )
