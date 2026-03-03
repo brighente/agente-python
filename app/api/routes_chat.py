@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User, Message, ChatSession
-from app.agent.agno_agent import agent
+from app.agent.agno_agent import build_agent
+from app.agent.tools import get_recent_messages, count_messages_in_session, list_user_sessions
 from app.schemas import (
     UserUpsertIn, UserOut,
     ChatSessionCreateIn, ChatSessionOut,
@@ -104,28 +105,18 @@ def send(payload: SendMessageIn, db: Session = Depends(get_db)):
     if not sess:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    # 2- Salvar mensagem no banco
-    user_msg = Message(
-        id=uuid.uuid4(),
-        session_id=payload.session_id,
-        role="user",
-        content=payload.message
-    )
-    db.add(user_msg)
-    db.commit()
-
-    # 3- Buscar historico de conversa
+    # 2- Buscar historico de conversa
     historico = (
         db.query(Message).filter(Message.session_id == payload.session_id).order_by(Message.created_at.desc()).limit(20).all()
     )
 
     historico.reverse() # volta a ordem
 
-    # 4- Monta o contexto
+    # 3- Monta o contexto
     system_msg=(
-        "Você está conversando em um chat."
-        "Use o histórico apenas como contexto para conversa."
-        "Responda sempre em português."
+        "Você está conversando em um chat. "
+        "Use o histórico apenas como contexto para conversa. "
+        "Responda sempre em português. "
     )
 
     historico_formatado = []
@@ -140,28 +131,69 @@ def send(payload: SendMessageIn, db: Session = Depends(get_db)):
 
     prompt = (
         f"SYSTEM: {system_msg}\n\n"
-        f"HISTÓRICO: (role: conteúdo):\n{historico_formatado}\n\n"
-        f"Agora responda a última mensagem do usuário de forma útil e objetiva."
+        f"HISTÓRICO (use apenas se for relevante para a pergunta atual):\n"
+        f"{historico_formatado}\n\n"
+        f"MENSAGEM_ATUAL (responda APENAS isso):\n"
+        f"{payload.message}\n\n"
+        "INSTRUÇÕES IMPORTANTES:\n"
+        "- Ignore assuntos anteriores que não sejam relevantes.\n"
+        "- Não repita respostas anteriores.\n"
+        "- Só use ferramentas se forem necessárias para responder a MENSAGEM_ATUAL.\n"
     )
 
+    # 4- Define as tools do agente
+    def tool_get_recent_messages(limit: int = 10) -> str:
+        print(f"[TOOL] tool_get_recent_messages(limit={limit})") 
+        return get_recent_messages(db, str(payload.session_id), limit=limit)
+    
+    
+    def tool_count_messages() -> int:
+        print(f"[TOOL] tool_count_messages()")
+        return count_messages_in_session(db, str(payload.session_id))
+    
+    def tool_list_user_sessions(limit: int = 10) -> str:
+        print(f"[TOOL] tool_list_user_sessions(limit={limit})")
+        return list_user_sessions(db, str(payload.user_id), limit=limit)
+
+    agent = build_agent(tools=[tool_count_messages, tool_get_recent_messages, tool_list_user_sessions])
+
     # 5- Inicia o agente
-    run = agent.run(
-        input=prompt,
-        user_id=str(payload.user_id),
-        session_id=str(payload.session_id),
-    )
+    try:
+        run = agent.run(
+            input=prompt,
+            user_id=str(payload.user_id),
+            session_id=str(payload.session_id),
+        )
+
+    except Exception as e:
+        print(f"[AGENT ERROR] {type(e).__name__}: {e}")
+        return SendMessageOut(reply="Houve um erro ao se comunicar com o agente")
 
     reply = run.content if run and run.content else ""
 
-    # 6 - Salva mensagem do assistente
+    if reply == "":
+        return SendMessageOut(reply="Houve um erro ao se comunicar com o agente")
+        
+    # 6- Salva mensagem do usuário
+    user_msg = Message(
+        id=uuid.uuid4(),
+        session_id=payload.session_id,
+        role="user",
+        content=payload.message
+    )
+
+    # 7- Salva mensagem do assistente
     assistant_msg = Message(
         id=uuid.uuid4(),
         session_id=payload.session_id,
         role="assistant",
         content=reply
     )
+
+    db.add(user_msg)
     db.add(assistant_msg)
     db.commit()
+    db.refresh(user_msg)
     db.refresh(assistant_msg)
 
     return SendMessageOut(reply=reply)

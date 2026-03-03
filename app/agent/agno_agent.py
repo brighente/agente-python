@@ -9,9 +9,11 @@ BASE_INSTRUCTIONS = [
         "Utilize poucos ou nenhum emoji"
     ]
 
-agent = Agent(
+def build_agent(tools: list) -> Agent:
+    return Agent(
     name="Agente Python de Estudos",
     model=OpenAIChat(id=settings.openai_model, api_key=settings.openai_api_key),
     instructions=BASE_INSTRUCTIONS,
+    tools=tools,
     markdown=True
 )
