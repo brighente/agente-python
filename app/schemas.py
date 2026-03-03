@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic import BaseModel, EmailStr
 from uuid import UUID
 from datetime import datetime
@@ -48,3 +50,4 @@ class SendMessageIn(BaseModel):
 
 class SendMessageOut(BaseModel):
     reply: str
+    tools_used: List[str] = []

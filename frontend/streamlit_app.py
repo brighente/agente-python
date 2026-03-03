@@ -1,3 +1,5 @@
+import json
+
 import requests
 import streamlit as st
 
@@ -53,18 +55,56 @@ if msg:
     with st.chat_message("user"):
         st.markdown(msg)
 
-    r = requests.post(
-        f"{API_BASE}/chat/send",
+    assistant_box = st.chat_message("assistant")
+    text_slot = assistant_box.empty()
+    tools_slot = assistant_box.empty()
+
+    full_text = ""
+    tools_used = []
+
+    with requests.post(
+        f"{API_BASE}/chat/send/stream",
         json={
             "user_id": st.session_state.user["id"],
             "session_id": st.session_state.session["id"],
             "message": msg,
         },
-    )
-    r.raise_for_status()
-    reply = r.json()["reply"]
+        stream=True,
+    ) as r:
+        r.raise_for_status()
 
-    with st.chat_message("assistant"):
-        st.markdown(reply)
+        event_type = None
+        for raw in r.iter_lines(decode_unicode=True):
+            if not raw:
+                continue
+
+            if raw.startswith("event:"):
+                event_type = raw.replace("event:", "").strip()
+                continue
+
+            if raw.startswith("data:"):
+                payload_json = raw.replace("data:", "").strip()
+                data = json.loads(payload_json)
+
+                if event_type == "chunk":
+                    full_text += data["text"]
+                    text_slot.markdown(full_text)
+
+                elif event_type == "tools":
+                    tools_used = data.get("tools_used", [])
+                    if tools_used:
+                        tools_slot.caption("🛠️ Tools: " + ", ".join(tools_used))
+
+                elif event_type == "error":
+                    text_slot.error(data.get("message", "Erro"))
+                    break
+
+                elif event_type == "done":
+                    if not data.get("ok", True) and not full_text:
+                        text_slot.error("Erro: resposta vazia do agente")
+                    final_tools = data.get("tools_used", tools_used)
+                    if final_tools:
+                        tools_slot.caption("🛠️ Tools: " + ", ".join(final_tools))
+                    break
 
     st.rerun()
