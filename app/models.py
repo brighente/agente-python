@@ -41,7 +41,7 @@ class Message(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
-        ForeignKey("chat_session_id", ondelete="CASCADE")
+        ForeignKey("chat_sessions.id", ondelete="CASCADE")
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
