@@ -38,3 +38,13 @@ class MessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+
+class SendMessageIn(BaseModel):
+    user_id: UUID
+    session_id: UUID
+    message: str
+
+
+class SendMessageOut(BaseModel):
+    reply: str

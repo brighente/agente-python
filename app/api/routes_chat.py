@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User, Message, ChatSession
+from app.agent.agno_agent import agent
 from app.schemas import (
     UserUpsertIn, UserOut,
     ChatSessionCreateIn, ChatSessionOut,
-    MessageCreateIn, MessageOut
+    MessageCreateIn, MessageOut,
+    SendMessageIn, SendMessageOut
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -89,3 +91,57 @@ def list_messages(session_id: str, db: Session = Depends(get_db)):
         .all()
     )
     return msgs
+
+
+@router.post("/send/", response_model=SendMessageOut)
+def send(payload: SendMessageIn, db: Session = Depends(get_db)):
+    # 1- Validacao da sessao do usuario
+    user = db.query(User).filter(User.id == payload.user_id).one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    sess = db.query(ChatSession).filter(ChatSession.id == payload.session_id).one_or_none()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # 2- Salvar mensagem no banco
+    user_msg = Message(
+        id=uuid.uuid4(),
+        session_id=payload.session_id,
+        role="user",
+        content=payload.message
+    )
+    db.add(user_msg)
+    db.commit()
+
+    # 3- Buscar historico de conversa
+    historico = (
+        db.query(Message).filter(Message.session_id == payload.session_id).order_by(Message.created_at.asc()).limit(20).all()
+    )
+
+    # 4- Monta o contexto
+    content_text = ""
+    for m in historico:
+        content_text+=f"{m.role.upper()}: {m.content}\n"
+
+    # 5- Inicia o agente
+    run = agent.run(
+        input=f"Histórico:\n{content_text}\n\nAgora responda a última mensagem do usuário de forma útil.",
+        user_id=str(payload.user_id),
+        session_id=str(payload.session_id),
+    )
+
+    reply = run.content if run and run.content else ""
+
+    # 6 - Salva mensagem do assistente
+    assistant_msg = Message(
+        id=uuid.uuid4(),
+        session_id=payload.session_id,
+        role="assistant",
+        content=reply
+    )
+    db.add(assistant_msg)
+    db.commit()
+    db.refresh(assistant_msg)
+
+    return SendMessageOut(reply=reply)
