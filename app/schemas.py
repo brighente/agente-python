@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 
 from pydantic import BaseModel, EmailStr
 from uuid import UUID
@@ -51,3 +51,13 @@ class SendMessageIn(BaseModel):
 class SendMessageOut(BaseModel):
     reply: str
     tools_used: List[str] = []
+
+
+class IngestTextIn(BaseModel):
+    name: str
+    text: str
+    metadata: dict[str, Any] | None = None
+
+
+class IngestTextOut(BaseModel):
+    document_id: str

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models import Message, ChatSession
+from app.rag.retriever_service import retrieve_top_k
 
 def get_recent_messages(db: Session, session_id: str, limit: int = 10) -> str:
     # Traz as últimas 10 mensagens da sessão (5 interacoes user -> Agente)
@@ -48,6 +49,20 @@ def list_user_sessions(db: Session, user_id: str, limit: int = 10) -> str:
 
     lines = []
     for l in sessions:
-        lines.append(f"{l.id} | {l.title or "(Sem Título)"}")
+        lines.append(f"{l.id} | {l.title or '(Sem Título)'}")
 
     return "\n".join(lines)
+
+
+def retrieve_context(db: Session, query: str, top_k: int = 5) -> str:
+    hits = retrieve_top_k(db=db, query=query, top_k=top_k)
+
+    if not hits:
+        return "(Nenhum contexto relevante encontrado na base.)"
+    
+    lines = []
+    for i, h in enumerate(hits, start=1):
+        src = h.document_name or h.document_id
+        lines.append(f"[{i}] fonte: {src} | score: {h.score:.3f}\n{h.content}")
+
+    return "\n\n".join(lines)

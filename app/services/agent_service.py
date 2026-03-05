@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.agent.agno_agent import build_agent
-from app.agent.tools import count_messages_in_session, list_user_sessions, get_recent_messages
+from app.agent.tools import count_messages_in_session, list_user_sessions, get_recent_messages, retrieve_context
 
 def build_prompt(system_msg: str, historico: str, user_message: str) -> str:
     return(
@@ -13,6 +13,9 @@ def build_prompt(system_msg: str, historico: str, user_message: str) -> str:
         "- Ignore assuntos anteriores que não sejam relevantes.\n"
         "- Não repita respostas anteriores.\n"
         "- Só use ferramentas se forem necessárias para responder a MENSAGEM_ATUAL.\n"
+        "- Se a pergunta pedir fatos, dados ou algo que possa estar na base de conhecimento, use tool_retrieve_context(query=mensagem_atual).\n"
+        "- Se a tool retornar contexto, use esse contexto para responder e cite a 'fonte' no texto.\n"
+        "- Se a tool não encontrar nada, diga que não encontrou nos documentos.\n"
     )
 
 def make_tools(db: Session, user_id: str, session_id: str, tools_used: list[str]):
@@ -31,7 +34,12 @@ def make_tools(db: Session, user_id: str, session_id: str, tools_used: list[str]
         print(f"[TOOL] tool_list_user_sessions(limit={limit})")
         return list_user_sessions(db, user_id, limit=limit)
     
-    return [tool_count_messages, tool_get_recent_messages, tool_list_user_sessions]
+    def tool_retrieve_context(query: str, top_k: int = 5) -> str:
+        tools_used.append(f"tool_retrieve_context(query=..., top_k={top_k})")
+        print(f"[TOOL] tool_retrieve_context(top_k={top_k})")
+        return retrieve_context(db, query=query, top_k=top_k)
+    
+    return [tool_count_messages, tool_get_recent_messages, tool_list_user_sessions, tool_retrieve_context]
 
 
 def run_agent(db: Session, user_id: str, session_id: str, prompt: str):
