@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 from agno.knowledge.embedder.openai import OpenAIEmbedder
+from app.config import settings
 from app.models import Chunk, Document
 from dataclasses import dataclass
 @dataclass
@@ -21,7 +22,9 @@ def retrieve_top_k(
     top_k: int = 5,
     filters: dict[str, Any] | None = None,
 ) -> list[RetrievedChunk]:
-    embedder = OpenAIEmbedder()
+    embedder = OpenAIEmbedder(
+        api_key=settings.openai_api_key
+    )
     q_emb = embedder.get_embedding(query)
 
     q = (
@@ -42,7 +45,7 @@ def retrieve_top_k(
         doc_meta = filters.get("doc_metadata")
         if isinstance(doc_meta, dict):
             for key, val in doc_meta.items():
-                q = q.filter(Document.metadata[key].astext == str(val))
+                q = q.filter(Document.meta[key].astext == str(val))
 
     rows = (
         q.order_by("distance")
@@ -61,8 +64,8 @@ def retrieve_top_k(
                 content=chunk.content,
                 score=score,
                 metadata={
-                    "chunk": chunk.metadata or {},
-                    "document": doc.metadata or {},
+                    "chunk": chunk.meta or {},
+                    "document": doc.meta or {},
                 },
             )
         )

@@ -65,7 +65,7 @@ class Document(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)  # sha256, etc.
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
-    metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    meta: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -78,7 +78,7 @@ class Document(Base):
 
     __table_args__ = (
         Index("idx_documents_status", "status"),
-        Index("idx_documents_metadata_gin", "metadata", postgres_using="gin")
+        Index("idx_documents_metadata_gin", "metadata", postgresql_using="gin")
     )
 
 
@@ -91,12 +91,12 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
-    metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    meta: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)    
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     document = relationship("Document", back_populates="chunks")    
 
     __table_args__ = (
         Index("idx_chunks_document_id", "document_id"),
-        Index("idx_chunks_metadata_gin", "metadata", postgres_using="gin"),
+        Index("idx_chunks_metadata_gin", "metadata", postgresql_using="gin"),
         Index("idx_chunks_documents_chunk_index", "document_id", "chunk_index", unique=True),
     )

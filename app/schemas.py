@@ -1,6 +1,6 @@
 from typing import Any, List
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from uuid import UUID
 from datetime import datetime
 
@@ -61,3 +61,30 @@ class IngestTextIn(BaseModel):
 
 class IngestTextOut(BaseModel):
     document_id: str
+
+
+class RagSearchIn(BaseModel):
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=50)
+    filters: dict[str, Any] | None = None
+
+
+class RagHitOut(BaseModel):
+    chunk_id: str
+    document_id: str
+    document_name: str
+    score: float
+    content: str
+    metadata: dict[str, Any]
+
+
+class RagSearchOut(BaseModel):
+    query: str
+    top_k: int
+    hits: list[RagHitOut]
+
+
+class IngestPdfOut(BaseModel):
+    document_id: str
+    name: str
+    pages_text_chars: int

@@ -35,6 +35,37 @@ with st.sidebar:
         st.session_state.session = r.json()
         st.success("Sessão criada!")
 
+    st.divider()
+    st.subheader("📚 RAG (Base de Conhecimento)")
+
+    uploaded = st.file_uploader("Enviar PDF para o RAG", type=["pdf"])
+    if uploaded and st.button("Ingerir PDF"):
+        files = {"file": (uploaded.name, uploaded.getvalue(), "application/pdf")}
+        r = requests.post(f"{API_BASE}/rag/ingest/pdf", files=files)
+        if r.status_code != 200:
+            st.error(f"Erro: {r.text}")
+        else:
+            data = r.json()
+            st.success(f"Ingerido! document_id={data['document_id']}")
+            st.caption(f"Texto extraído (chars): {data['pages_text_chars']}")
+    st.divider()
+    st.subheader("🔎 Debug Search")
+
+    search_q = st.text_input("Buscar na base (pgvector)", value="")
+    top_k = st.slider("Top K", min_value=1, max_value=20, value=5)
+
+    if st.button("Buscar") and search_q.strip():
+        r = requests.post(f"{API_BASE}/rag/search", json={"query": search_q, "top_k": top_k})
+        if r.status_code != 200:
+            st.error(f"Erro: {r.text}")
+        else:
+            res = r.json()
+            hits = res.get("hits", [])
+            st.write(f"Resultados: {len(hits)}")
+            for i, h in enumerate(hits, start=1):
+                st.markdown(f"**[{i}] {h['document_name']} — score {h['score']:.3f}**")
+                st.code(h["content"][:1200])
+
 st.divider()
 
 if not st.session_state.user or not st.session_state.session:

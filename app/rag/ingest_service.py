@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
-
+from app.config import settings
 from agno.knowledge.embedder.openai import OpenAIEmbedder
 
 from app.models import Document, Chunk
@@ -69,7 +69,7 @@ def ingest_text(
         mime_type=mime_type,
         checksum=checksum,
         status="pending",
-        metadata=metadata,
+        meta=metadata,
     )
     db.add(doc)
     db.flush()
@@ -80,10 +80,25 @@ def ingest_text(
         db.commit()
         raise ValueError("Texto vazio após normalização/chunking.")
 
-    embedder = OpenAIEmbedder() 
+    embedder = OpenAIEmbedder(
+        api_key=settings.openai_api_key
+    )
+
+    test_emb = embedder.get_embedding("teste")
+    print("[EMBED TEST] len =", 0 if not test_emb else len(test_emb))
 
     for idx, chunk_str in enumerate(chunks_text):
-        emb = embedder.get_embedding(chunk_str)
+        try:
+            emb = embedder.get_embedding(chunk_str)
+        except Exception as e:
+            doc.status = "failed"
+            db.commit()
+            raise RuntimeError(f"Falha ao gerar embedding: {type(e).__name__}: {e}")
+
+        if not emb or len(emb) != 1536:
+            doc.status = "failed"
+            db.commit()
+            raise RuntimeError(f"Embedding inválido: esperado 1536 dims, veio {len(emb) if emb is not None else 'None'}")
 
         ch = Chunk(
             id=uuid.uuid4(),
@@ -92,7 +107,7 @@ def ingest_text(
             content=chunk_str,
             token_count=None,
             embedding=emb,
-            metadata={
+            meta={
                 "chunk_size": chunk_size,
                 "overlap": overlap,
             },
